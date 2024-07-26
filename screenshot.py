@@ -11,6 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+import json
 
 # Load API key from environment
 api_key = os.environ.get('API_survey')
@@ -67,12 +68,14 @@ def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-def answer_survey_choice(api_key: str, output_filename: str, html_question: str) -> int:
+def answer_survey_choice(api_key: str, output_filename: str, intro_text: str, html_question: str) -> int:
     base64_image = encode_image(output_filename)
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
+
+    print("Introduction text HERE:", intro_text)
 
     payload = {
         "model": "gpt-4o",
@@ -80,7 +83,8 @@ def answer_survey_choice(api_key: str, output_filename: str, html_question: str)
             {
                 "role": "system",
                 "content": (
-                    "You are answering a survey. You will be given a screenshot of a survey "
+                    f"You are answering a survey. The introduction of the survey is as follows: {intro_text}."
+                    "You will be given a screenshot of a survey page"
                     "and html code of the question. You have to answer the question as if you are "
                     "a 57 year old man who lives in Nordrhein-Westfalen with 4 others. "
                     "Only return the number of the answer you choose, like '1', '2', '3' or '4', etc."
@@ -121,7 +125,7 @@ def answer_survey_other(api_key: str, output_filename: str, html_question: str) 
             {
                 "role": "system",
                 "content": (
-                    "You are answering a survey. You will be given a screenshot of a survey "
+                    "You are answering a survey. You will be given a screenshot of a survey question"
                     "and html code of the question. You have to answer the question as if you are "
                     "a 57 year old man who lives in Nordrhein-Westfalen with 4 others. "
                     "Only return your answer and nothing else."
@@ -148,8 +152,56 @@ def answer_survey_other(api_key: str, output_filename: str, html_question: str) 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     return response.json()["choices"][0]["message"]["content"]
 
+# function to check if an image is part of the introduction or a new question in the survey
+def check_image_type(api_key: str, output_filename: str) -> str:
+    base64_image = encode_image(output_filename)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    payload = {
+        "model": "gpt-4o",
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are good at interpreting screenshots for the stage of a survey, whether\
+                    the screenshot is part of the introduction or if it is a new question. You will be given a screenshot\
+                    of a survey and you will be asked to return if the screenshot is part of the ihtroduction of the survey\
+                    or a new question. If the screenshot is part of the introduction, you will be asked to provide the introduction text. \
+                    The introduction text is visible in the screenshot. Type it out completely.\
+                    You need to answer in JSON format, like in the example below.\
+                    {'intro': true, 'intro_text': 'This is the introduction text.'} or \
+                    {'intro': false, 'intro_text': 'None'}"
+                },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Is this part of the introduction or a new question?"
+                },
+                {
+                  "type": "image_url",
+                  "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_image}"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+    
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    response = json.loads(response.json()["choices"][0]["message"]["content"])
+    introduction = response['intro']
+    intro_text = response['intro_text']
+    return introduction, intro_text
+
 def fill_survey(driver: webdriver.Chrome):
     page_index = 0
+    complete_intro_text = ""
 
     while True:
             screenshots = take_screenshots_scroll(driver)
@@ -163,6 +215,14 @@ def fill_survey(driver: webdriver.Chrome):
                 driver.find_elements(By.CLASS_NAME, "response_column") +
                 driver.find_elements(By.TAG_NAME, 'textarea')
             )
+
+            introduction, intro_text = check_image_type(api_key, output_filename)
+            print(f"Introduction: {introduction}")
+            print(f"Introduction text: {intro_text}")
+
+            # if the screenshot is part of the introduction, add the introduction text to the complete_intro_text
+            if introduction:
+                complete_intro_text += intro_text
 
             def get_position(element):
                 location = element.location
@@ -179,7 +239,7 @@ def fill_survey(driver: webdriver.Chrome):
                     print("Question type: cbc_task")
                     html_question = element.get_attribute('innerHTML')
                     print("Question:", html_question)
-                    answer = answer_survey_choice(api_key, output_filename, html_question)
+                    answer = answer_survey_choice(api_key, output_filename, complete_intro_text, html_question)
                     print("Answer:", answer)
                     element.find_elements(By.CLASS_NAME, "task_select_button")[answer - 1].click()
                     time.sleep(1)
@@ -225,11 +285,6 @@ def fill_survey(driver: webdriver.Chrome):
 
 print(fill_survey(driver))
 
-# Function to encode the image
-#def encode_image(image_path):
-#  with open(image_path, "rb") as image_file:
-#    return base64.b64encode(image_file.read()).decode('utf-8')
-#
 #base64_image = encode_image('survey_screenshot.png')
 #
 #headers = {

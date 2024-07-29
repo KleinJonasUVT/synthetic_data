@@ -76,7 +76,9 @@ def answer_survey_choice(api_key: str, messages) -> int:
 
     payload = {
         "model": "gpt-4o",
-        "messages": messages
+        "messages": messages,
+        "top_p": 0.5,
+        "temperature": 0.5
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
@@ -122,6 +124,21 @@ def answer_survey_other(api_key: str, output_filename: str, html_question: str) 
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     return response.json()["choices"][0]["message"]["content"]
+
+def summarize_answer(api_key, html_question, answer):
+    client = OpenAI(api_key=api_key)
+    # summarize the answer given to the survey question with an openai api call
+    response = client.chat.completions.create(
+      model="gpt-4o-mini",
+      messages=[
+        {"role": "system", "content": "You are a helpful assistant that summarizes the answer given to a survey question."\
+          "You will be given the html code of the question and the answer given by the respondent. "\
+          "You have to summarize the answer."},
+        {"role": "user", "content": f"{html_question} \n\n I answered this question with the following answer: {answer}"},
+      ]
+    )
+    print(response.choices[0].message.content)
+    return response.choices[0].message.content
 
 def fill_survey(driver: webdriver.Chrome):
     page_index = 0
@@ -169,7 +186,7 @@ def fill_survey(driver: webdriver.Chrome):
       print(f"Total questions: {total_questions}")
 
       if total_questions == 0:
-            # If no questions are found, add only the image to the messages thread
+            # If no questions(introduction) are found, add only the image to the messages thread
             messages.append({
                 "role": "user",
                 "content": content
@@ -183,7 +200,6 @@ def fill_survey(driver: webdriver.Chrome):
                 print("Question type: cbc_task")
                 html_question = element.get_attribute('innerHTML')
                 print("Question:", html_question)
-                content = []
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -193,9 +209,13 @@ def fill_survey(driver: webdriver.Chrome):
                     "content": content
                 })
                 answer = answer_survey_choice(api_key, messages)
+                # remove the last message from the messages list
+                messages = messages[:-1]
+                # summarize the answer given to the survey question
+                answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
                     "role": "assistant",
-                    "content": f"{answer}"
+                    "content": f"{answer_summary}"
                 })
                 print("Answer:", answer)
                 element.find_elements(By.CLASS_NAME, "task_select_button")[answer - 1].click()

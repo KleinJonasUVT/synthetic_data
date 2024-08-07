@@ -12,25 +12,37 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import json
+import logging
+import pandas as pd
+
+def setup_logging():
+    logger = logging.getLogger(__name__)
+    logger.setLevel('DEBUG')
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel('DEBUG')
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(console_handler)
+
+    return logger
 
 # Load API key from environment
 api_key = os.environ.get('API_survey')
 
-# Set up Chrome options
-chrome_options = Options()
+# Set up logging
+logger = setup_logging()
 
-# Use webdriver-manager to manage ChromeDriver installation
-service = Service(ChromeDriverManager().install())
+# Open the csv file with user data
+# Load the data from the CSV file
+data = pd.read_csv('user_data.csv', delimiter=';')
+logger.info(f"Data loaded from CSV file")
+# Showing head of the data
+logger.info(data.head())
 
-# Set up the Chrome WebDriver with the managed service
-driver = webdriver.Chrome(service=service, options=chrome_options)
-
-# Open the survey URL
-url = 'https://sustainabilityde.sawtoothsoftware.com/'
-driver.get(url)
-time.sleep(3)  # Ensure page is fully loaded
-
-def take_screenshots_scroll(driver: webdriver.Chrome, filepath: str = 'screenshot') -> List[str]:
+def take_screenshots_scroll(driver: webdriver.Chrome, filepath: str = 'screenshots/screenshot') -> List[str]:
     screenshots = []
     last_height = 0
 
@@ -38,6 +50,7 @@ def take_screenshots_scroll(driver: webdriver.Chrome, filepath: str = 'screensho
         filename = f'{filepath}_{len(screenshots)}.png'
         driver.save_screenshot(filename)
         screenshots.append(filename)
+        logger.info(f"Screenshot saved: {filename}")
 
         driver.execute_script("window.scrollBy(0, window.innerHeight);")
         time.sleep(2)
@@ -63,6 +76,7 @@ def stitch_images_vertically(images: List[str], output_filename: str = 'stitched
         y_offset += img.height
 
     stitched_image.save(output_filename)
+    logger.info(f"Stitched image saved: {output_filename}")
 
 def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
@@ -82,10 +96,9 @@ def answer_survey_choice(api_key: str, messages) -> int:
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    print(response.json())
     return int(response.json()["choices"][0]["message"]["content"])
 
-def answer_survey_other(api_key: str, output_filename: str, html_question: str) -> str:
+def answer_survey_other(api_key: str, output_filename: str, html_question: str, age, gender, Country_origin, ethnicity, Country, student_text, work_status) -> str:
     base64_image = encode_image(output_filename)
     headers = {
         "Content-Type": "application/json",
@@ -98,10 +111,18 @@ def answer_survey_other(api_key: str, output_filename: str, html_question: str) 
             {
                 "role": "system",
                 "content": (
-                    "You are answering a survey. You will be given a screenshot of a survey question"
-                    "and html code of the question. You have to answer the question as if you are "
-                    "a 57 year old man who lives in Nordrhein-Westfalen with 4 others. "
-                    "Only return your answer and nothing else."
+                    f"You are answering a survey. You will be given a screenshot of a survey question \
+                    and html code of the question. You have to answer the question as if you are \
+                    a {age} year old {gender} born in {Country_origin} with ethnicity {ethnicity} who lives in {Country}. \
+                    {student_text} and your work status is: {work_status}. So: \
+                    - Age: {age} \
+                    - Gender: {gender} \
+                    - Country of origin: {Country_origin} \
+                    - Ethnicity: {ethnicity} \
+                    - Country: {Country} \
+                    - Student: {student_text} \
+                    - Work status: {work_status} \
+                    Only return your answer and nothing else."
                 )
             },
             {
@@ -137,19 +158,28 @@ def summarize_answer(api_key, html_question, answer):
         {"role": "user", "content": f"{html_question} \n\n I answered this question with the following answer: {answer}"},
       ]
     )
-    print(response.choices[0].message.content)
+    logger.info(f"Answer summary: {response.choices[0].message.content}")
     return response.choices[0].message.content
 
-def fill_survey(driver: webdriver.Chrome):
+def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity, Country, student_text, work_status):
     page_index = 0
+    logger.info(f"Starting survey for user with: age {age}, gender {gender}, country of origin {Country_origin}, ethnicity {ethnicity}, country {Country}, student status {student_text}, work status {work_status}")
     messages = [
             {
                 "role": "system",
                 "content": (
-                    f"You are answering a survey."
-                    "You will be given a screenshot of a survey page"
-                    "and html code of the question. You have to answer the question as if you are "
-                    "a 57 year old man who lives in Nordrhein-Westfalen with 4 others. "
+                    f"You are answering a survey. You will be given html code of the question. \
+                    You have to answer the question as if you are a {age} year old {gender} \
+                    born in {Country_origin} with ethnicity {ethnicity} who lives in {Country}. \
+                    {student_text} and your work status is: {work_status}. So: \
+                    - Age: {age} \
+                    - Gender: {gender} \
+                    - Country of origin: {Country_origin} \
+                    - Ethnicity: {ethnicity} \
+                    - Country: {Country} \
+                    - Student: {student_text} \
+                    - Work status: {work_status} \
+                    Only return your answer and nothing else."
                     "Only return the number of the answer you choose, like '1', '2', '3' or '4', etc."
                 )
             }
@@ -158,7 +188,7 @@ def fill_survey(driver: webdriver.Chrome):
     while True:
       content = []
       screenshots = take_screenshots_scroll(driver)
-      output_filename = f'survey_screenshot_{page_index}.png'
+      output_filename = f'stitched/survey_screenshot_{page_index}.png'
       stitch_images_vertically(screenshots, output_filename)
 
       all_questions = (
@@ -170,12 +200,14 @@ def fill_survey(driver: webdriver.Chrome):
       )
 
       base64_image = encode_image(output_filename)
+      logger.info(f"Image encoded to base64")
       content.append({
                   "type": "image_url",
                   "image_url": {
                     "url": f"data:image/jpeg;base64,{base64_image}"
                   }
                 })
+      logger.info(f"Screenshot added to API messages")
 
       def get_position(element):
           location = element.location
@@ -183,7 +215,7 @@ def fill_survey(driver: webdriver.Chrome):
 
       sorted_elements = sorted(all_questions, key=get_position)
       total_questions = len(all_questions)
-      print(f"Total questions: {total_questions}")
+      logger.info(f"Total questions found: {total_questions}")
 
       if total_questions == 0:
             # If no questions(introduction) are found, add only the image to the messages thread
@@ -191,15 +223,15 @@ def fill_survey(driver: webdriver.Chrome):
                 "role": "user",
                 "content": content
             })
+            logger.info(f"Screenshot added to messages, no questions found, moving to next page")
 
       else:
         for i in range(total_questions):
             element = sorted_elements[i]
 
             if element in driver.find_elements(By.CLASS_NAME, "cbc_task"):
-                print("Question type: cbc_task")
+                logger.info(f"Question type: cbc_task")
                 html_question = element.get_attribute('innerHTML')
-                print("Question:", html_question)
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -208,46 +240,135 @@ def fill_survey(driver: webdriver.Chrome):
                     "role": "user",
                     "content": content
                 })
+                logger.info(f"HTML question added to messages")
                 answer = answer_survey_choice(api_key, messages)
+                logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list
                 messages = messages[:-1]
+                logger.info(f"Removing html question from message thread")
                 # summarize the answer given to the survey question
                 answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
                     "role": "assistant",
                     "content": f"{answer_summary}"
                 })
-                print("Answer:", answer)
+                logger.info(f"Answer summary added to message thread")
                 element.find_elements(By.CLASS_NAME, "task_select_button")[answer - 1].click()
+                logger.info(f"Answer selected in chrome browser")
                 time.sleep(1)
 
             elif element in driver.find_elements(By.TAG_NAME, 'select'):
+                logger.info(f"Question type: select")
                 html_question = element.get_attribute('outerHTML')
-                answer = answer_survey_choice(api_key, output_filename, html_question)
-                print(html_question, answer)
+                content.append({
+                    "type": "text",
+                    "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
+                })
+                messages.append({
+                    "role": "user",
+                    "content": content
+                })
+                logger.info(f"HTML question added to messages")
+                answer = answer_survey_choice(api_key, messages)
+                logger.info(f"Answer: {answer}")
+                # remove the last message from the messages list
+                messages = messages[:-1]
+                logger.info(f"Removing html question from message thread")
+                # summarize the answer given to the survey question
+                answer_summary = summarize_answer(api_key, html_question, answer)
+                messages.append({
+                    "role": "assistant",
+                    "content": f"{answer_summary}"
+                })
+                logger.info(f"Answer summary added to message thread")
                 select = Select(element)
                 select.select_by_value(str(answer))
+                logger.info(f"Answer selected in chrome browser")
                 time.sleep(1)
 
-            elif element in driver.find_elements(By.CLASS_NAME, "question.numeric"):
+
+            elif element in driver.find_elements(By.CLASS_NAME, "question numeric"):
+                logger.info(f"Question type: question numeric")
                 html_question = element.get_attribute('outerHTML')
-                answer = answer_survey_other(api_key, output_filename, html_question)
-                print(html_question, answer)
+                content.append({
+                    "type": "text",
+                    "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
+                })
+                messages.append({
+                    "role": "user",
+                    "content": content
+                })
+                logger.info(f"HTML question added to messages")
+                answer = answer_survey_other(api_key, messages)
+                logger.info(f"Answer: {answer}")
+                # remove the last message from the messages list
+                messages = messages[:-1]
+                logger.info(f"Removing html question from message thread")
+                # summarize the answer given to the survey question
+                answer_summary = summarize_answer(api_key, html_question, answer)
+                messages.append({
+                    "role": "assistant",
+                    "content": f"{answer_summary}"
+                })
+                logger.info(f"Answer summary added to message thread")
                 element.find_element(By.TAG_NAME, "input").send_keys(answer)
+                logger.info(f"Answer inputted in chrome browser")
                 time.sleep(1)
 
             elif element in driver.find_elements(By.CLASS_NAME, "response_column"):
+                logger.info(f"Question type: response_column")
                 html_question = element.get_attribute('innerHTML')
-                answer = answer_survey_choice(api_key, output_filename, html_question)
-                print(html_question, answer)
+                content.append({
+                    "type": "text",
+                    "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
+                })
+                messages.append({
+                    "role": "user",
+                    "content": content
+                })
+                logger.info(f"HTML question added to messages")
+                answer = answer_survey_choice(api_key, messages)
+                logger.info(f"Answer: {answer}")
+                # remove the last message from the messages list
+                messages = messages[:-1]
+                logger.info(f"Removing html question from message thread")
+                # summarize the answer given to the survey question
+                answer_summary = summarize_answer(api_key, html_question, answer)
+                messages.append({
+                    "role": "assistant",
+                    "content": f"{answer_summary}"
+                })
+                logger.info(f"Answer summary added to message thread")
                 element.click()
+                logger.info(f"Answer selected in chrome browser")
                 time.sleep(1)
 
             elif element in driver.find_elements(By.TAG_NAME, 'textarea'):
+                logger.info(f"Question type: textarea")
                 html_question = element.get_attribute('innerHTML')
-                answer = answer_survey_other(api_key, output_filename, html_question)
-                print(html_question, answer)
+                content.append({
+                    "type": "text",
+                    "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
+                })
+                messages.append({
+                    "role": "user",
+                    "content": content
+                })
+                logger.info(f"HTML question added to messages")
+                answer = answer_survey_other(api_key, messages)
+                logger.info(f"Answer: {answer}")
+                # remove the last message from the messages list
+                messages = messages[:-1]
+                logger.info(f"Removing html question from message thread")
+                # summarize the answer given to the survey question
+                answer_summary = summarize_answer(api_key, html_question, answer)
+                messages.append({
+                    "role": "assistant",
+                    "content": f"{answer_summary}"
+                })
+                logger.info(f"Answer summary added to message thread")
                 element.send_keys(answer)
+                logger.info(f"Answer inputted in chrome browser")
                 time.sleep(1)
 
       # add messages to a json file
@@ -260,8 +381,39 @@ def fill_survey(driver: webdriver.Chrome):
       next_button.click()
       time.sleep(1)
       page_index += 1
-      print(f"Page {page_index} completed.")
+      logger.info(f"Page {page_index} completed")
 
     return screenshots
 
-print(fill_survey(driver))
+# Iterate over each row in the dataframe
+for index, row in data.iterrows():
+    # Extract the necessary variables
+    age = row['Age']
+    gender = row['Sex']
+    Country_origin = row['Country_of_birth']
+    ethnicity = row['Ethnicity']
+    Country = row['Country_of_residence']
+    student_status = row['Student_status']
+    work_status = row['Employment_status']
+
+    # Translate student status to the required text
+    student_text = "You are a student" if student_status == "Yes" else "You are not a student"
+
+    # Set up Chrome options
+    chrome_options = Options()
+
+    # Use webdriver-manager to manage ChromeDriver installation
+    service = Service(ChromeDriverManager().install())
+
+    # Set up the Chrome WebDriver with the managed service
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    # Open the survey URL
+    url = 'https://sustainabilityde.sawtoothsoftware.com/'
+    driver.get(url)
+    time.sleep(3)  # Ensure page is fully loaded
+
+    fill_survey(driver, age, gender, Country_origin, ethnicity, Country, student_text, work_status)
+
+    # Close the browser
+    driver.quit()

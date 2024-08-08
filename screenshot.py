@@ -98,8 +98,7 @@ def answer_survey_choice(api_key: str, messages) -> int:
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     return int(response.json()["choices"][0]["message"]["content"])
 
-def answer_survey_other(api_key: str, output_filename: str, html_question: str, age, gender, Country_origin, ethnicity, Country, student_text, work_status) -> str:
-    base64_image = encode_image(output_filename)
+def answer_survey_other(api_key: str, messages) -> str:
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -107,41 +106,10 @@ def answer_survey_other(api_key: str, output_filename: str, html_question: str, 
 
     payload = {
         "model": "gpt-4o",
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    f"You are answering a survey. You will be given a screenshot of a survey question \
-                    and html code of the question. You have to answer the question as if you are \
-                    a {age} year old {gender} born in {Country_origin} with ethnicity {ethnicity} who lives in {Country}. \
-                    {student_text} and your work status is: {work_status}. So: \
-                    - Age: {age} \
-                    - Gender: {gender} \
-                    - Country of origin: {Country_origin} \
-                    - Ethnicity: {ethnicity} \
-                    - Country: {Country} \
-                    - Student: {student_text} \
-                    - Work status: {work_status} \
-                    Only return your answer and nothing else."
-                )
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                    "type": "text",
-                    "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_image}"
-                }
-            }
-        ]
-        }
-        ]
-      }
+        "messages": messages,
+        "top_p": 0.5,
+        "temperature": 0.5
+    }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
     return response.json()["choices"][0]["message"]["content"]
@@ -170,11 +138,12 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 "content": (
                     f"You are answering a survey. You will be given html code of the question. \
                     You have to answer the question as if you are a {age} year old {gender} \
-                    born in {Country_origin} with ethnicity {ethnicity} who lives in {Country}. \
+                    born in {Country_origin} with ethnicity {ethnicity} who lives in {Country}, Nordrhein-Westfalen. \
                     {student_text} and your work status is: {work_status}. So: \
                     - Age: {age} \
                     - Gender: {gender} \
                     - Country of origin: {Country_origin} \
+                    - German state: Nordrhein-Westfalen \
                     - Ethnicity: {ethnicity} \
                     - Country: {Country} \
                     - Student: {student_text} \
@@ -228,10 +197,12 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
       else:
         for i in range(total_questions):
             element = sorted_elements[i]
+            logger.debug(f"Element: {element}")
 
             if element in driver.find_elements(By.CLASS_NAME, "cbc_task"):
                 logger.info(f"Question type: cbc_task")
                 html_question = element.get_attribute('innerHTML')
+                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -241,6 +212,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
+                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_choice(api_key, messages)
                 logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list
@@ -260,6 +232,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
             elif element in driver.find_elements(By.TAG_NAME, 'select'):
                 logger.info(f"Question type: select")
                 html_question = element.get_attribute('outerHTML')
+                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -269,6 +242,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
+                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_choice(api_key, messages)
                 logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list
@@ -287,9 +261,10 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 time.sleep(1)
 
 
-            elif element in driver.find_elements(By.CLASS_NAME, "question numeric"):
+            elif element in driver.find_elements(By.CLASS_NAME, "question.numeric"):
                 logger.info(f"Question type: question numeric")
                 html_question = element.get_attribute('outerHTML')
+                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -299,6 +274,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
+                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_other(api_key, messages)
                 logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list
@@ -318,6 +294,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
             elif element in driver.find_elements(By.CLASS_NAME, "response_column"):
                 logger.info(f"Question type: response_column")
                 html_question = element.get_attribute('innerHTML')
+                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -327,6 +304,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
+                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_choice(api_key, messages)
                 logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list
@@ -346,6 +324,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
             elif element in driver.find_elements(By.TAG_NAME, 'textarea'):
                 logger.info(f"Question type: textarea")
                 html_question = element.get_attribute('innerHTML')
+                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -355,6 +334,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
+                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_other(api_key, messages)
                 logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list

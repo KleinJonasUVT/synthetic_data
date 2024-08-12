@@ -148,8 +148,12 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     - Country: {Country} \
                     - Student: {student_text} \
                     - Work status: {work_status} \
-                    Only return your answer and nothing else."
-                    "Only return the number of the answer you choose, like '1', '2', '3' or '4', etc."
+                    Only return your answer and nothing else.\
+                    IF it is a multuple choise question, Only return the number of the answer you choose, like '1', '2', '3' or '4', etc.\
+                    IF it is a text question, return the text you would write as a response.\
+                    ONLY return the answer.\
+                    ONLY return the answer on the html question provided.\
+                    DO NOT answer any other questions that are in the screenshot, ONLY the html question provided."
                 )
             }
       ]
@@ -168,14 +172,16 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
           driver.find_elements(By.TAG_NAME, 'textarea')
       )
 
+      print(f"{all_questions}")
+
       base64_image = encode_image(output_filename)
       logger.info(f"Image encoded to base64")
       content.append({
-                  "type": "image_url",
-                  "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_image}"
-                  }
-                })
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                    })
       logger.info(f"Screenshot added to API messages")
 
       def get_position(element):
@@ -187,7 +193,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
       logger.info(f"Total questions found: {total_questions}")
 
       if total_questions == 0:
-            # If no questions(introduction) are found, add only the image to the messages thread
+            # If no questions (introduction) are found, add only the image to the messages thread
             messages.append({
                 "role": "user",
                 "content": content
@@ -212,12 +218,15 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
-                logger.debug(f"Messages: {messages}")
+                logger.debug(f"Messages before: {messages}")
                 answer = answer_survey_choice(api_key, messages)
                 logger.info(f"Answer: {answer}")
                 # remove the last message from the messages list
                 messages = messages[:-1]
                 logger.info(f"Removing html question from message thread")
+                logger.info(f"Messages after: {messages}")
+                # Clear the content list
+                content = []
                 # summarize the answer given to the survey question
                 answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
@@ -248,6 +257,8 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 # remove the last message from the messages list
                 messages = messages[:-1]
                 logger.info(f"Removing html question from message thread")
+                # Clear the content list
+                content = []
                 # summarize the answer given to the survey question
                 answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
@@ -280,6 +291,8 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 # remove the last message from the messages list
                 messages = messages[:-1]
                 logger.info(f"Removing html question from message thread")
+                # Clear the content list
+                content = []
                 # summarize the answer given to the survey question
                 answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
@@ -310,6 +323,8 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 # remove the last message from the messages list
                 messages = messages[:-1]
                 logger.info(f"Removing html question from message thread")
+                # Clear the content list
+                content = []
                 # summarize the answer given to the survey question
                 answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
@@ -340,6 +355,8 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 # remove the last message from the messages list
                 messages = messages[:-1]
                 logger.info(f"Removing html question from message thread")
+                # Clear the content list
+                content = []
                 # summarize the answer given to the survey question
                 answer_summary = summarize_answer(api_key, html_question, answer)
                 messages.append({
@@ -394,6 +411,3 @@ for index, row in data.iterrows():
     time.sleep(3)  # Ensure page is fully loaded
 
     fill_survey(driver, age, gender, Country_origin, ethnicity, Country, student_text, work_status)
-
-    # Close the browser
-    driver.quit()

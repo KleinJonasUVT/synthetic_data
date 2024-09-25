@@ -15,123 +15,157 @@ import json
 import logging
 import pandas as pd
 
+# Logging setup function
 def setup_logging():
-    logger = logging.getLogger(__name__)
-    logger.setLevel('DEBUG')
+    """
+    Configures and returns a logger for debugging and monitoring the script's actions.
+    """
+    logger = logging.getLogger(__name__)  # Create a logger instance
+    logger.setLevel('DEBUG')  # Set logger level to DEBUG
 
-    console_handler = logging.StreamHandler()
+    # Configure console output for the logger
+    console_handler = logging.StreamHandler()  
     console_handler.setLevel('DEBUG')
 
+    # Define log message format
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(formatter)
 
+    # Attach the handler to the logger
     logger.addHandler(console_handler)
 
     return logger
 
-# Load API key from environment
+# Load API key from environment variable
 api_key = os.environ.get('API_survey')
 
 # Set up logging
 logger = setup_logging()
 
-# Open the csv file with user data
-# Load the data from the CSV file
-data = pd.read_csv('user_data.csv', delimiter=';')
-logger.info(f"Data loaded from CSV file")
-# Showing head of the data
-logger.info(data.head())
+# Load user data from CSV file
+data = pd.read_csv('user_data.csv', delimiter=';')  # Load data into a pandas DataFrame
+logger.info(f"Data loaded from CSV file")  # Log successful data load
+logger.info(data.head())  # Display first few rows of the data for verification
 
+# Function to capture screenshots while scrolling the page
 def take_screenshots_scroll(driver: webdriver.Chrome, filepath: str = 'screenshots/screenshot') -> List[str]:
-    screenshots = []
-    last_height = 0
+    """
+    Takes screenshots while scrolling through the webpage and returns the list of screenshot file paths.
+    """
+    screenshots = []  # List to hold screenshot file paths
+    last_height = 0  # Initialize last scroll position
 
     while True:
-        filename = f'{filepath}_{len(screenshots)}.png'
-        driver.save_screenshot(filename)
-        screenshots.append(filename)
+        filename = f'{filepath}_{len(screenshots)}.png'  # Filename for each screenshot
+        driver.save_screenshot(filename)  # Capture screenshot
+        screenshots.append(filename)  # Add filename to list
         logger.info(f"Screenshot saved: {filename}")
 
-        driver.execute_script("window.scrollBy(0, window.innerHeight);")
-        time.sleep(2)
+        driver.execute_script("window.scrollBy(0, window.innerHeight);")  # Scroll the page
+        time.sleep(2)  # Wait for scroll to complete
 
-        new_height = driver.execute_script("return window.pageYOffset")
-        if new_height == last_height:
+        new_height = driver.execute_script("return window.pageYOffset")  # Get new scroll position
+        if new_height == last_height:  # Stop if scroll position hasn't changed
             break
         last_height = new_height
 
     return screenshots
 
+# Function to stitch images vertically into one image
 def stitch_images_vertically(images: List[str], output_filename: str = 'stitched.png'):
-    imgs = [Image.open(x) for x in images]
-    widths, heights = zip(*(i.size for i in imgs))
+    """
+    Stitches the provided images vertically and saves the resulting image.
+    """
+    imgs = [Image.open(x) for x in images]  # Load images
+    widths, heights = zip(*(i.size for i in imgs))  # Get dimensions of images
 
-    total_height = sum(heights)
-    max_width = max(widths)
-    stitched_image = Image.new('RGB', (max_width, total_height))
+    total_height = sum(heights)  # Calculate total height of the stitched image
+    max_width = max(widths)  # Calculate max width of the images
+    stitched_image = Image.new('RGB', (max_width, total_height))  # Create a blank image canvas
 
-    y_offset = 0
+    y_offset = 0  # Initialize vertical offset
     for img in imgs:
-        stitched_image.paste(img, (0, y_offset))
-        y_offset += img.height
+        stitched_image.paste(img, (0, y_offset))  # Paste each image in order
+        y_offset += img.height  # Update offset for next image
 
-    stitched_image.save(output_filename)
+    stitched_image.save(output_filename)  # Save stitched image
     logger.info(f"Stitched image saved: {output_filename}")
 
+# Function to encode an image to base64
 def encode_image(image_path: str) -> str:
+    """
+    Encodes the image at the given path to a base64 string.
+    """
     with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
+        return base64.b64encode(image_file.read()).decode('utf-8')  # Return base64 encoded image
 
+# Function to handle answering multiple-choice questions via API
 def answer_survey_choice(api_key: str, messages) -> int:
+    """
+    Sends the survey question to the OpenAI API and returns a choice number (int) for multiple-choice questions.
+    """
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
 
     payload = {
-        "model": "gpt-4o",
+        "model": "gpt-4o",  # GPT-4 model used for responses
         "messages": messages,
         "top_p": 0.5,
         "temperature": 0.5
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    return int(response.json()["choices"][0]["message"]["content"])
+    return int(response.json()["choices"][0]["message"]["content"])  # Return choice as integer
 
+# Function to handle answering open-ended questions via API
 def answer_survey_other(api_key: str, messages) -> str:
+    """
+    Sends the survey question to the OpenAI API and returns a text response for open-ended questions.
+    """
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
 
     payload = {
-        "model": "gpt-4o",
+        "model": "gpt-4o",  # GPT-4 model used for responses
         "messages": messages,
         "top_p": 0.5,
         "temperature": 0.5
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-    return response.json()["choices"][0]["message"]["content"]
+    return response.json()["choices"][0]["message"]["content"]  # Return the text content
 
+# Function to summarize survey answers using OpenAI API
 def summarize_answer(api_key, html_question, answer):
-    client = OpenAI(api_key=api_key)
-    # summarize the answer given to the survey question with an openai api call
+    """
+    Summarizes the provided answer to the survey question using the OpenAI API.
+    """
+    client = OpenAI(api_key=api_key)  # Initialize OpenAI client
+
     response = client.chat.completions.create(
       model="gpt-4o-mini",
       messages=[
-        {"role": "system", "content": "You are a helpful assistant that summarizes the answer given to a survey question."\
-          "You will be given the html code of the question and the answer given by the respondent. "\
-          "You have to summarize the answer."},
+        {"role": "system", "content": "You are a helpful assistant that summarizes the answer given to a survey question. \
+          You will be given the html code of the question and the answer given by the respondent. You have to summarize the answer."},
         {"role": "user", "content": f"{html_question} \n\n I answered this question with the following answer: {answer}"},
       ]
     )
     logger.info(f"Answer summary: {response.choices[0].message.content}")
-    return response.choices[0].message.content
+    return response.choices[0].message.content  # Return summarized answer
 
+# Main function to fill the survey for a given user
 def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity, Country, student_text, work_status):
-    page_index = 0
+    """
+    Automates the process of filling out a survey for a user based on their profile and OpenAI-generated responses.
+    """
+    page_index = 0  # Track the survey page
     logger.info(f"Starting survey for user with: age {age}, gender {gender}, country of origin {Country_origin}, ethnicity {ethnicity}, country {Country}, student status {student_text}, work status {work_status}")
+    
+    # Define the base system message for OpenAI API responses
     messages = [
             {
                 "role": "system",
@@ -158,12 +192,14 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
             }
       ]
 
+    # Loop through survey pages and answer questions
     while True:
       content = []
-      screenshots = take_screenshots_scroll(driver)
+      screenshots = take_screenshots_scroll(driver)  # Take scrolling screenshots of the survey page
       output_filename = f'stitched/survey_screenshot_{page_index}.png'
-      stitch_images_vertically(screenshots, output_filename)
+      stitch_images_vertically(screenshots, output_filename)  # Stitch screenshots into one image
 
+      # Gather all questions on the page by finding elements by their respective classes and tags
       all_questions = (
           driver.find_elements(By.CLASS_NAME, "cbc_task") +
           driver.find_elements(By.TAG_NAME, 'select') +
@@ -174,7 +210,7 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
 
       print(f"{all_questions}")
 
-      base64_image = encode_image(output_filename)
+      base64_image = encode_image(output_filename)  # Encode the stitched image into base64
       logger.info(f"Image encoded to base64")
       content.append({
                     "type": "image_url",
@@ -185,15 +221,18 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
       logger.info(f"Screenshot added to API messages")
 
       def get_position(element):
+          """
+          Helper function to get the screen position of an element.
+          """
           location = element.location
           return location['y'], location['x']
 
-      sorted_elements = sorted(all_questions, key=get_position)
-      total_questions = len(all_questions)
+      sorted_elements = sorted(all_questions, key=get_position)  # Sort questions based on their position on the page
+      total_questions = len(all_questions)  # Count number of questions
       logger.info(f"Total questions found: {total_questions}")
 
       if total_questions == 0:
-            # If no questions (introduction) are found, add only the image to the messages thread
+            # If no questions (e.g., an introductory page), just add the screenshot to messages
             messages.append({
                 "role": "user",
                 "content": content
@@ -201,12 +240,14 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
             logger.info(f"Screenshot added to messages, no questions found, moving to next page")
 
       else:
+        # Loop through each question found on the page
         for i in range(total_questions):
             element = sorted_elements[i]
             logger.debug(f"Element: {element}")
 
+            # Check for specific question types and answer accordingly
             if element in driver.find_elements(By.CLASS_NAME, "cbc_task"):
-                logger.info(f"Question type: cbc_task")
+                logger.info(f"Question type: cbc_task")  # Multiple choice task
                 html_question = element.get_attribute('innerHTML')
                 logger.debug(f"HTML question: {html_question}")
                 content.append({
@@ -219,25 +260,23 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 })
                 logger.info(f"HTML question added to messages")
                 logger.debug(f"Messages before: {messages}")
-                answer = answer_survey_choice(api_key, messages)
+                answer = answer_survey_choice(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
-                # remove the last message from the messages list
-                messages = messages[:-1]
+                messages = messages[:-1]  # Remove the question from the messages
                 logger.info(f"Removing html question from message thread")
                 logger.info(f"Messages after: {messages}")
-                # Clear the content list
-                content = []
-                # summarize the answer given to the survey question
-                answer_summary = summarize_answer(api_key, html_question, answer)
+                content = []  # Reset content list
+                answer_summary = summarize_answer(api_key, html_question, answer)  # Summarize the answer
                 messages.append({
                     "role": "assistant",
                     "content": f"{answer_summary}"
                 })
                 logger.info(f"Answer summary added to message thread")
-                element.find_elements(By.CLASS_NAME, "task_select_button")[answer - 1].click()
+                element.find_elements(By.CLASS_NAME, "task_select_button")[answer - 1].click()  # Click the chosen answer in the browser
                 logger.info(f"Answer selected in chrome browser")
                 time.sleep(1)
 
+            # Handle select dropdowns
             elif element in driver.find_elements(By.TAG_NAME, 'select'):
                 logger.info(f"Question type: select")
                 html_question = element.get_attribute('outerHTML')
@@ -252,26 +291,23 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 })
                 logger.info(f"HTML question added to messages")
                 logger.debug(f"Messages: {messages}")
-                answer = answer_survey_choice(api_key, messages)
+                answer = answer_survey_choice(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
-                # remove the last message from the messages list
-                messages = messages[:-1]
+                messages = messages[:-1]  # Remove the question from the messages
                 logger.info(f"Removing html question from message thread")
-                # Clear the content list
-                content = []
-                # summarize the answer given to the survey question
-                answer_summary = summarize_answer(api_key, html_question, answer)
+                content = []  # Reset content list
+                answer_summary = summarize_answer(api_key, html_question, answer)  # Summarize the answer
                 messages.append({
                     "role": "assistant",
                     "content": f"{answer_summary}"
                 })
                 logger.info(f"Answer summary added to message thread")
-                select = Select(element)
+                select = Select(element)  # Select the dropdown option in the browser
                 select.select_by_value(str(answer))
                 logger.info(f"Answer selected in chrome browser")
                 time.sleep(1)
 
-
+            # Handle numeric input fields
             elif element in driver.find_elements(By.CLASS_NAME, "question.numeric"):
                 logger.info(f"Question type: question numeric")
                 html_question = element.get_attribute('outerHTML')
@@ -286,24 +322,22 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 })
                 logger.info(f"HTML question added to messages")
                 logger.debug(f"Messages: {messages}")
-                answer = answer_survey_other(api_key, messages)
+                answer = answer_survey_other(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
-                # remove the last message from the messages list
-                messages = messages[:-1]
+                messages = messages[:-1]  # Remove the question from the messages
                 logger.info(f"Removing html question from message thread")
-                # Clear the content list
-                content = []
-                # summarize the answer given to the survey question
-                answer_summary = summarize_answer(api_key, html_question, answer)
+                content = []  # Reset content list
+                answer_summary = summarize_answer(api_key, html_question, answer)  # Summarize the answer
                 messages.append({
                     "role": "assistant",
                     "content": f"{answer_summary}"
                 })
                 logger.info(f"Answer summary added to message thread")
-                element.find_element(By.TAG_NAME, "input").send_keys(answer)
+                element.find_element(By.TAG_NAME, "input").send_keys(answer)  # Enter the answer into the input field in the browser
                 logger.info(f"Answer inputted in chrome browser")
                 time.sleep(1)
 
+            # Handle response columns (likely used for multi-select or matrix questions)
             elif element in driver.find_elements(By.CLASS_NAME, "response_column"):
                 logger.info(f"Question type: response_column")
                 html_question = element.get_attribute('innerHTML')
@@ -318,24 +352,22 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 })
                 logger.info(f"HTML question added to messages")
                 logger.debug(f"Messages: {messages}")
-                answer = answer_survey_choice(api_key, messages)
+                answer = answer_survey_choice(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
-                # remove the last message from the messages list
-                messages = messages[:-1]
+                messages = messages[:-1]  # Remove the question from the messages
                 logger.info(f"Removing html question from message thread")
-                # Clear the content list
-                content = []
-                # summarize the answer given to the survey question
-                answer_summary = summarize_answer(api_key, html_question, answer)
+                content = []  # Reset content list
+                answer_summary = summarize_answer(api_key, html_question, answer)  # Summarize the answer
                 messages.append({
                     "role": "assistant",
                     "content": f"{answer_summary}"
                 })
                 logger.info(f"Answer summary added to message thread")
-                element.click()
+                element.click()  # Select the answer in the browser
                 logger.info(f"Answer selected in chrome browser")
                 time.sleep(1)
 
+            # Handle text areas (open text responses)
             elif element in driver.find_elements(By.TAG_NAME, 'textarea'):
                 logger.info(f"Question type: textarea")
                 html_question = element.get_attribute('innerHTML')
@@ -350,41 +382,43 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
                 })
                 logger.info(f"HTML question added to messages")
                 logger.debug(f"Messages: {messages}")
-                answer = answer_survey_other(api_key, messages)
+                answer = answer_survey_other(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
-                # remove the last message from the messages list
-                messages = messages[:-1]
+                messages = messages[:-1]  # Remove the question from the messages
                 logger.info(f"Removing html question from message thread")
-                # Clear the content list
-                content = []
-                # summarize the answer given to the survey question
-                answer_summary = summarize_answer(api_key, html_question, answer)
+                content = []  # Reset content list
+                answer_summary = summarize_answer(api_key, html_question, answer)  # Summarize the answer
                 messages.append({
                     "role": "assistant",
                     "content": f"{answer_summary}"
                 })
                 logger.info(f"Answer summary added to message thread")
-                element.send_keys(answer)
+                element.send_keys(answer)  # Enter the text response into the text area
                 logger.info(f"Answer inputted in chrome browser")
                 time.sleep(1)
 
-      # add messages to a json file
+      # Save the messages to a JSON file for later review
       with open(f'messages.json', 'w') as f:
           json.dump(messages, f)
 
-      next_button = WebDriverWait(driver, 10).until(
-          lambda d: d.find_element(By.ID, "next_button")
-      )
-      next_button.click()
+      # Look for and click the "Next" button to move to the next survey page
+      try:
+        next_button = WebDriverWait(driver, 10).until(
+            lambda d: d.find_element(By.ID, "next_button")
+        )
+        next_button.click()
+      except:
+        logger.error(f"Next button not found on page {page_index}.")  # Log an error if the button is not found
+        break
       time.sleep(1)
-      page_index += 1
+      page_index += 1  # Increment page index
       logger.info(f"Page {page_index} completed")
 
     return screenshots
 
-# Iterate over each row in the dataframe
+# Loop through each row (user) in the loaded CSV data and fill the survey
 for index, row in data.iterrows():
-    # Extract the necessary variables
+    # Extract necessary variables from the CSV row
     age = row['Age']
     gender = row['Sex']
     Country_origin = row['Country_of_birth']
@@ -393,21 +427,28 @@ for index, row in data.iterrows():
     student_status = row['Student_status']
     work_status = row['Employment_status']
 
-    # Translate student status to the required text
+    # Translate student status to text used in API messages
     student_text = "You are a student" if student_status == "Yes" else "You are not a student"
 
-    # Set up Chrome options
+    # Set up Chrome WebDriver options
     chrome_options = Options()
 
-    # Use webdriver-manager to manage ChromeDriver installation
+    # Use WebDriver Manager to ensure the latest ChromeDriver is installed and used
     service = Service(ChromeDriverManager().install())
 
-    # Set up the Chrome WebDriver with the managed service
+    # Initialize Chrome WebDriver
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     # Open the survey URL
     url = 'https://sustainabilityde.sawtoothsoftware.com/'
     driver.get(url)
-    time.sleep(3)  # Ensure page is fully loaded
+    time.sleep(3)  # Wait for the page to load
 
+    # Fill out the survey for this user
     fill_survey(driver, age, gender, Country_origin, ethnicity, Country, student_text, work_status)
+
+    # Close the browser after completing the survey
+    driver.quit()
+    logger.info(f"Survey completed for user {index + 1}")
+    logger.info(f"Waiting 3 seconds before starting the next survey")
+    time.sleep(3)

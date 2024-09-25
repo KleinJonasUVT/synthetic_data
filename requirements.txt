@@ -1,0 +1,7 @@
+pandas
+requests
+selenium
+pillow
+openai
+webdriver_manager
+logging

@@ -8,7 +8,6 @@ Key features include:
 - Automatic screenshot capture while scrolling through the survey.
 - Stitching of captured screenshots into a single image.
 - Automated answering of both multiple-choice and open-ended questions using AI.
-- Summary of responses using OpenAI GPT-4o.
 
 ## Prerequisites
 
@@ -59,10 +58,13 @@ A sample `user_data.csv` is available in the repository. It should have the foll
 
     **Note**: If using this in a headless environment, modify the Chrome options to run Chrome in headless mode.
 
-6. **Review Logs and Outputs**:
-    Screenshots of the survey pages and responses will be saved in the `screenshots/` directory. Logs of the process will be available in the console.
+6. **Running for your own survey**
+    The script currently points to the URL `https://sustainabilityde.sawtoothsoftware.com/`. To use this code for your own survey, change the URL to your survey link. You can do this by modifying the `url` variable in the script:
+    ```python 
+    url = 'https://your-survey-url.com/'
+    ```
 
-Enjoy creating synthetic data for your choice-based conjoint analysis using AI!
+By following these steps, you can adapt this code to work with any survey and generate synthetic data responses.
 
 
 

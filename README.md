@@ -20,7 +20,8 @@ selenium
 webdriver-manager 
 openai 
 Pillow 
-requests```
+requests
+```
 
 ### `user_data.csv`
 
@@ -55,7 +56,7 @@ A sample `user_data.csv` is available in the repository. It should have the foll
 
 
     The script will automatically launch a Chrome browser, fill out the survey, and generate screenshots and logs. After each user survey is completed, the browser will close and the next user's survey will begin.
-    
+
     **Note**: If using this in a headless environment, modify the Chrome options to run Chrome in headless mode.
 
 6. **Review Logs and Outputs**:

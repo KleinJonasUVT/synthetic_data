@@ -43,9 +43,9 @@ api_key = os.environ.get('API_survey')
 logger = setup_logging()
 
 # Load user data from CSV file
-data = pd.read_csv('user_data.csv', delimiter=';')  # Load data into a pandas DataFrame
-logger.info(f"Data loaded from CSV file")  # Log successful data load
-logger.info(data.head())  # Display first few rows of the data for verification
+#data = pd.read_csv('user_data.csv', delimiter=';')  # Load data into a pandas DataFrame
+#logger.info(f"Data loaded from CSV file")  # Log successful data load
+#logger.info(data.head())  # Display first few rows of the data for verification
 
 # Function to capture screenshots while scrolling the page
 def take_screenshots_scroll(driver: webdriver.Chrome, filepath: str = 'screenshots/screenshot') -> List[str]:
@@ -158,36 +158,42 @@ def summarize_answer(api_key, html_question, answer):
     return response.choices[0].message.content  # Return summarized answer
 
 # Main function to fill the survey for a given user
-def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity, Country, student_text, work_status):
+def fill_survey(driver: webdriver.Chrome):
     """
     Automates the process of filling out a survey for a user based on their profile and OpenAI-generated responses.
     """
     page_index = 0  # Track the survey page
-    logger.info(f"Starting survey for user with: age {age}, gender {gender}, country of origin {Country_origin}, ethnicity {ethnicity}, country {Country}, student status {student_text}, work status {work_status}")
     
     # Define the base system message for OpenAI API responses
     messages = [
             {
                 "role": "system",
                 "content": (
-                    f"You are answering a survey. You will be given html code of the question. \
-                    You have to answer the question as if you are a {age} year old {gender} \
-                    born in {Country_origin} with ethnicity {ethnicity} who lives in {Country}, Nordrhein-Westfalen. \
-                    {student_text} and your work status is: {work_status}. So: \
-                    - Age: {age} \
-                    - Gender: {gender} \
-                    - Country of origin: {Country_origin} \
-                    - German state: Nordrhein-Westfalen \
-                    - Ethnicity: {ethnicity} \
-                    - Country: {Country} \
-                    - Student: {student_text} \
-                    - Work status: {work_status} \
-                    Only return your answer and nothing else.\
-                    IF it is a multuple choise question, Only return the number of the answer you choose, like '1', '2', '3' or '4', etc.\
-                    IF it is a text question, return the text you would write as a response.\
-                    ONLY return the answer.\
-                    ONLY return the answer on the html question provided.\
-                    DO NOT answer any other questions that are in the screenshot, ONLY the html question provided."
+                    f"""Process and answer a question provided in the form of HTML code by taking on a persona with specified characteristics. Only return your answer and nothing else.
+
+- Assume a persona with the following attributes: age between 18 and 80, a certain gender, and occupation. Use these attributes to inform your responses.
+- If the question is multiple-choice, only return the number of your selected answer, such as '1', '2', '3', etc.
+- If it is a text question, provide the text you would write as a response considering the persona.
+- Answer only the HTML-based question, ignoring any other content.
+
+# Steps
+
+1. **Read the HTML Question**: Carefully analyze the HTML code provided to identify the question.
+2. **Determine Question Type**: Check if it's a multiple-choice or text-based question.
+3. **Respond with Persona**:
+   - Assume a persona with defined attributes (e.g., age, gender, occupation).
+   - For multiple-choice, return only the number of choice.
+   - For text-based, write a concise text response influenced by the persona.
+
+# Output Format
+
+- Return the answer exclusively; for multiple-choice, provide only the number, and for text questions, a short text response reflecting the persona.
+- Do not include any other explanations or content beyond the direct answer to the HTML question provided.
+
+# Notes
+
+- Maintain focus on the HTML-based question, disregarding any other data that may appear in the form.
+- Use the persona to influence, but not dominate, the response. Ensure your response format aligns with the question type."""
                 )
             }
       ]
@@ -417,19 +423,8 @@ def fill_survey(driver: webdriver.Chrome, age, gender, Country_origin, ethnicity
     return screenshots
 
 # Loop through each row (user) in the loaded CSV data and fill the survey
-for index, row in data.iterrows():
-    # Extract necessary variables from the CSV row
-    age = row['Age']
-    gender = row['Sex']
-    Country_origin = row['Country_of_birth']
-    ethnicity = row['Ethnicity']
-    Country = row['Country_of_residence']
-    student_status = row['Student_status']
-    work_status = row['Employment_status']
-
-    # Translate student status to text used in API messages
-    student_text = "You are a student" if student_status == "Yes" else "You are not a student"
-
+number_of_respondents = 100
+for i in range(number_of_respondents):
     # Set up Chrome WebDriver options
     chrome_options = Options()
 
@@ -444,11 +439,12 @@ for index, row in data.iterrows():
     driver.get(url)
     time.sleep(3)  # Wait for the page to load
 
+    print(f"Starting surver for user {i}")
     # Fill out the survey for this user
-    fill_survey(driver, age, gender, Country_origin, ethnicity, Country, student_text, work_status)
+    fill_survey(driver)
 
     # Close the browser after completing the survey
     driver.quit()
-    logger.info(f"Survey completed for user {index + 1}")
+    logger.info(f"Survey completed for user {i + 1}")
     logger.info(f"Waiting 3 seconds before starting the next survey")
     time.sleep(3)

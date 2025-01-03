@@ -214,8 +214,6 @@ def fill_survey(driver: webdriver.Chrome):
           driver.find_elements(By.TAG_NAME, 'textarea')
       )
 
-      print(f"{all_questions}")
-
       base64_image = encode_image(output_filename)  # Encode the stitched image into base64
       logger.info(f"Image encoded to base64")
       content.append({
@@ -249,13 +247,11 @@ def fill_survey(driver: webdriver.Chrome):
         # Loop through each question found on the page
         for i in range(total_questions):
             element = sorted_elements[i]
-            logger.debug(f"Element: {element}")
 
             # Check for specific question types and answer accordingly
             if element in driver.find_elements(By.CLASS_NAME, "cbc_task"):
                 logger.info(f"Question type: cbc_task")  # Multiple choice task
                 html_question = element.get_attribute('innerHTML')
-                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -265,12 +261,10 @@ def fill_survey(driver: webdriver.Chrome):
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
-                logger.debug(f"Messages before: {messages}")
                 answer = answer_survey_choice(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
                 messages = messages[:-1]  # Remove the question from the messages
                 logger.info(f"Removing html question from message thread")
-                logger.info(f"Messages after: {messages}")
                 content = []  # Reset content list
                 answer_summary = summarize_answer(api_key, html_question, answer)  # Summarize the answer
                 messages.append({
@@ -286,7 +280,6 @@ def fill_survey(driver: webdriver.Chrome):
             elif element in driver.find_elements(By.TAG_NAME, 'select'):
                 logger.info(f"Question type: select")
                 html_question = element.get_attribute('outerHTML')
-                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -296,7 +289,6 @@ def fill_survey(driver: webdriver.Chrome):
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
-                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_choice(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
                 messages = messages[:-1]  # Remove the question from the messages
@@ -317,7 +309,6 @@ def fill_survey(driver: webdriver.Chrome):
             elif element in driver.find_elements(By.CLASS_NAME, "question.numeric"):
                 logger.info(f"Question type: question numeric")
                 html_question = element.get_attribute('outerHTML')
-                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -327,7 +318,6 @@ def fill_survey(driver: webdriver.Chrome):
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
-                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_other(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
                 messages = messages[:-1]  # Remove the question from the messages
@@ -347,7 +337,6 @@ def fill_survey(driver: webdriver.Chrome):
             elif element in driver.find_elements(By.CLASS_NAME, "response_column"):
                 logger.info(f"Question type: response_column")
                 html_question = element.get_attribute('innerHTML')
-                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -357,7 +346,6 @@ def fill_survey(driver: webdriver.Chrome):
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
-                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_choice(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
                 messages = messages[:-1]  # Remove the question from the messages
@@ -377,7 +365,6 @@ def fill_survey(driver: webdriver.Chrome):
             elif element in driver.find_elements(By.TAG_NAME, 'textarea'):
                 logger.info(f"Question type: textarea")
                 html_question = element.get_attribute('innerHTML')
-                logger.debug(f"HTML question: {html_question}")
                 content.append({
                     "type": "text",
                     "text": f"{html_question} \n\n Answer this question as if you were the respondent. Only return your answer."
@@ -387,7 +374,6 @@ def fill_survey(driver: webdriver.Chrome):
                     "content": content
                 })
                 logger.info(f"HTML question added to messages")
-                logger.debug(f"Messages: {messages}")
                 answer = answer_survey_other(api_key, messages)  # Get answer from OpenAI API
                 logger.info(f"Answer: {answer}")
                 messages = messages[:-1]  # Remove the question from the messages
@@ -427,6 +413,9 @@ number_of_respondents = 100
 for i in range(number_of_respondents):
     # Set up Chrome WebDriver options
     chrome_options = Options()
+
+    # Make the browser headless
+    chrome_options.add_argument("--headless")
 
     # Use WebDriver Manager to ensure the latest ChromeDriver is installed and used
     service = Service(ChromeDriverManager().install())

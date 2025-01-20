@@ -1,4 +1,4 @@
-![Flowchart](https://user-images.githubusercontent.com/6601700/118792660-dc148b80-b88b-11eb-89e6-3a65df46fcd4.png)
+![Flowchart](design.png)
 
 ### Explanation of the Two Options:
 
